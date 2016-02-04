@@ -29,15 +29,17 @@ PubNub is an Internet 2-way radio, a bidirectional json radio.
 5. Copy the code from envTailDevice.nut into your Device Pane (on the right)
 6. Check your code for errors, then **Build and Run**
 
+## Testing
+
 At this point your Imp should be running, subscribed to your PubNub channel, and ready to send sensor data when asked.
-To verify this:
+
 1. Open the PubNub Developer Console
 2. Subscribe to both the action and status channels
-3. Publish **{"imp":"readSensors"}** to the action channel, you might need to escape the quotes:
+3. Publish **{"imp":"readSensors"}** to the action channel, you might need to escape the quotes
 ```
 {\"imp\":\"readSensors\"}
 ```
-4. The status channel should then output the json as received from your imp:
+The status channel should then output the json as received from your imp:
 ```
 {
   "fields": {
