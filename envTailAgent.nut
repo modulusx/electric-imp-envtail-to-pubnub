@@ -1,66 +1,62 @@
-// Agent Code
-// Adapted from Electric Imp's "Weather Station" example: https://electricimp.com/docs/tails/weatherstation/
-#require "InitialState.class.nut:1.0.0"
+#require "PubNub.class.nut:1.1.0"
 
 // Establish a local variable to hold environmental data
 local lastReading = {};
 lastReading.pressure <- 1013.25;
 lastReading.temp <- 22;
-lastReading.day <- true;
 lastReading.lux <- 300;
 lastReading.humid <- 0;
 
-// Initialize the Initial State streamer with Access Key (required),
-// Bucket Key (optional), and Bucket Name (optional)
-is <- InitialState("Your_Access_Key","imptail",":smiling_imp: Electric Imp + Env Tail");
+// PubNub Publish and Subscribe Keys
+const PUBKEY = "pub-c-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx";
+const SUBKEY = "sub-c-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx";
 
-// Add a function to post data from the device to your stream
+statusChannel <- "home-status";
+actionChannel <- "home-action";
 
-function manageReading(reading) {
+pubnub <- PubNub(PUBKEY, SUBKEY);
+
+pubnub.subscribe([actionChannel], function(err, result, tt) {
+    if(result != null && actionChannel in result) {
+        try {
+            local data = http.jsondecode(result[actionChannel]);
+            if ("imp" in data) {
+                device.send("action", data["imp"]);
+            }
+        } catch(ex) {
+            server.log("Error - " + ex);
+        }
+    }
+});
+
+function handleSensors(reading) {
     // Note: reading is the data passed from the device, ie.
     // a Squirrel table with the key 'temp'
-
-    // Print to the device logs that data is being posted
-    server.log("manageReading called");
     
-    // Create strings that round readings to 2 decimal places
-    local tempString = format("%.2f", reading.temp);
-    local humidString = format("%.2f", reading.humid);
-    local pressString = format("%.2f", reading.pressure);
-    local luxString = format("%.2f", reading.lux);
-
-    // Send a particular message based on certain readings
-    local day = reading.day;
+    local now = date();
+    local timeString = now.year + "-" + (now.month + 1) + "-" + now.day + "T" +
+    now.hour + ":" + now.min + ":" + now.sec + "Z";
     
-    if (day == true) {
-        dayString <- ":city_sunset:";
-    } else {
-        dayString <- ":night_with_stars:";
-    }
-
-    local diff = reading.pressure - lastReading.pressure;
+    local sensorStatus = {
+        "measurement": "environmental",
+        "tags": {
+            "host": "imp01",
+            "region": "home01"
+        },
+        "time": timeString,
+        "fields": {
+            "temp": (reading.temp.tofloat()* 9 / 5) + 32,
+            "humid": reading.humid,
+            "press": reading.pressure,
+            "lux": reading.lux
+        }
+    };
     
-    if (diff > 0) {
-        diffString <- ":arrow_up: Rising";
-    } else {
-        diffString <- ":arrow_down: Falling";
-    }
-    
-    // Send an array of events to Initial State
-    is.sendEvents([
-        {"key": ":thermometer: temperature (C)", "value": tempString},
-        {"key": ":sweat_drops: humidity (%)", "value": humidString},
-        {"key": ":balloon: pressure (hPa)", "value": pressString},
-        {"key": ":arrow_up_down: pressure is", "value": diffString},
-        {"key": ":alarm_clock: day or night?", "value": dayString},
-        {"key": ":bulb: light level (lux)", "value": luxString},
-    ], function(err, data) {
-        if (err != null) server.error("Error: " + err);
-    });
+    // Send an array of events to PubNub Status Channel
+    pubnub.publish(statusChannel, sensorStatus);
     
     lastReading = reading;
 }
 
-
 // Register the function to handle data messages from the device
-device.on("reading", manageReading);
+device.on("sensors", handleSensors);

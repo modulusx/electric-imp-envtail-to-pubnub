@@ -1,5 +1,3 @@
-// Device Code
-// Adapted from Electric Imp's "Weather Station" example: https://electricimp.com/docs/tails/weatherstation/
 #require "Si702x.class.nut:1.0.0"
 #require "APDS9007.class.nut:1.0.0"
 #require "LPS25H.class.nut:1.0.0"
@@ -9,7 +7,6 @@ data <- {};
 data.temp <- 0;
 data.humid <- 0;
 data.pressure <- 0;
-data.day <- true;
 data.lux <- 0;
 
 // Instance the Si702x and save a reference in tempHumidSensor
@@ -36,21 +33,12 @@ led.configure(DIGITAL_OUT, 0);
 // This function will be called regularly to take the temperature,
 // light, humidity, and pressure and log it to the device’s agent
 
-function getReadings() {
+function readSensors() {
     // Flash the LED
     flashLed();
-            
-    // Get the light level
-    local lux = lightSensor.read();
     
-    // Day or night?
-    if (lux > 250) {
-        data.day = true;
-    } else {
-        data.day = false;
-    }
-
-    data.lux = lux;
+    // Get the light level
+    data.lux = lightSensor.read();
     
     // Get the pressure. This is an asynchronous call, so we need to 
     // pass a function that will be called only when the sensor 
@@ -69,12 +57,7 @@ function getReadings() {
             data.humid = reading.humidity;
             
             // Send the data to the agent
-            agent.send("reading", data);
-            
-            // Put the imp to sleep for five minutes BUT
-            // only do so when impOS has done all it needs to
-            // do and has gone into an idle state
-            imp.onidle(function() { server.sleepfor(300); } );
+            agent.send("sensors", data);
         });
     });
 }
@@ -84,13 +67,25 @@ function flashLed() {
     led.write(1);
     
     // Pause for half a second
-    imp.sleep(0.5);
+    imp.sleep(0.25);
     
     // Turn the LED off
     led.write(0);
 }
 
-// Take a temperature reading as soon as the device starts up
-// Note: when the device wakes from sleep (server.sleepfor())
-// it runs its device code afresh - ie. it does a warm boot
-getReadings();
+// Set the LED when the agent requests it
+agent.on("action", function(state) {
+  switch(state) {
+    case "ledOff":
+      led.write(0);
+      break;
+    case "ledOn":
+      led.write(1);
+      break;
+    case "readSensors":
+      readSensors();
+    default:
+      flashLed();
+      break;
+  }
+});
